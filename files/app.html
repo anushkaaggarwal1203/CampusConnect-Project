@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CampusConnect</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen md:flex">
+
+<aside class="bg-indigo-700 text-white md:w-64 p-4 md:min-h-screen flex md:flex-col gap-2 overflow-x-auto">
+  <div class="text-xl font-extrabold md:mb-4 whitespace-nowrap flex items-center gap-2">
+    <span>🎓</span> CampusConnect
+  </div>
+  <nav id="nav" class="flex md:flex-col gap-1"></nav>
+  <button onclick="CC.logout()" class="md:mt-auto text-left px-3 py-2 rounded hover:bg-indigo-600 font-medium">Logout</button>
+</aside>
+
+<main class="flex-1 p-4 md:p-8 max-w-5xl">
+  <h1 id="title" class="text-2xl font-bold mb-4"></h1>
+  <div id="view"></div>
+  
+  <!-- Chat Drawer / Modal -->
+  <div id="chatModal" class="fixed inset-0 bg-slate-900/50 hidden backdrop-blur-sm flex justify-end z-50">
+    <div class="bg-white w-full max-w-md h-full flex flex-col shadow-2xl">
+      <div class="p-4 bg-indigo-700 text-white flex justify-between items-center">
+        <div>
+          <h3 id="chatPartnerName" class="font-bold text-lg">Chat</h3>
+          <p id="chatPartnerSub" class="text-xs text-indigo-200"></p>
+        </div>
+        <button onclick="closeChat()" class="text-white text-xl hover:text-slate-200">&times;</button>
+      </div>
+      <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50"></div>
+      <div class="p-3 border-t flex gap-2 bg-white">
+        <input id="chatInput" class="border border-slate-300 rounded-lg px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Type a message...">
+        <button onclick="sendMsg()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <p id="toast" class="fixed bottom-4 right-4 bg-slate-900 text-white px-4 py-2 rounded-lg hidden shadow-lg z-50"></p>
+</main>
+
+<script src="app.js"></script>
+<script>
+if(!CC.me()) location.href='index.html';
+
+const $ = id => document.getElementById(id);
+const tabs = {
+  profile: '👤 My Profile',
+  directory: '📋 Directory',
+  requests: '📨 Requests',
+  connections: '🤝 Connections & Chat'
+};
+
+let activeChatPartnerId = null;
+
+const chip = (t, c='indigo') => `<span class="bg-${c}-100 text-${c}-700 text-xs px-2.5 py-1 rounded-full font-medium">${t}</span>`;
+const inp = 'border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none';
+const btn = 'bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-semibold transition';
+
+function toast(m) {
+  const t = $('toast');
+  t.textContent = m;
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 2500);
+}
+
+function run(fn) {
+  try { fn(); } catch(e) { toast(e.message); }
+}
+
+function card(s, isConnection=false) {
+  const me = CC.me();
+  const isMe = s.id === me.id;
+  const isConnected = me.connections.includes(s.id);
+
+  return `<div class="bg-white rounded-xl shadow-sm border border-slate-200/80 p-4 mb-3">
+    <div class="flex justify-between items-start gap-2">
+      <div>
+        <div class="font-bold text-slate-900 text-lg">${s.name} ${isMe ? '<span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">You</span>' : ''}</div>
+        <div class="text-sm text-slate-500">ID ${s.id} · ${s.branch} · Year ${s.year}</div>
+      </div>
+      <div class="flex gap-2">
+        ${!isMe && !isConnected ? `<button onclick="run(()=>{CC.send(${s.id});toast('Request sent')})" class="${btn} !py-1 text-sm">Connect</button>` : ''}
+        ${isConnection ? `
+          <button onclick="openChat(${s.id})" class="${btn} !bg-emerald-600 hover:!bg-emerald-700 !py-1 text-sm">Chat</button>
+          <button onclick="run(()=>{CC.removeConnection(${s.id});toast('Connection removed');show('connections')})" class="${btn} !bg-rose-600 hover:!bg-rose-700 !py-1 text-sm">Remove</button>
+        ` : ''}
+      </div>
+    </div>
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      ${s.skills.map(k=>chip(k)).join('')}
+      ${s.interests.map(k=>chip(k,'emerald')).join('')}
+    </div>
+  </div>`;
+}
+
+const grid = (l, isConn=false) => l.length ? `<div class="grid sm:grid-cols-2 gap-3">${l.map(s => card(s, isConn)).join('')}</div>` : '<p class="text-slate-500">No records found.</p>';
+
+const views = {
+  profile() {
+    const m = CC.me();
+    return `${card(m)}
+    <div class="grid sm:grid-cols-2 gap-3 mt-4">
+     ${['skills','interests'].map(k=>`
+       <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+         <h3 class="font-semibold capitalize mb-2">Add ${k.slice(0,-1)}</h3>
+         <div class="flex gap-2">
+           <input id="in_${k}" class="${inp} flex-1 min-w-0" placeholder="New ${k.slice(0,-1)}...">
+           <button onclick="run(()=>{CC.add('${k}',$('in_${k}').value);show('profile')})" class="${btn}">Add</button>
+         </div>
+       </div>`).join('')}
+    </div>
+    <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 mt-6">
+      <h3 class="font-bold text-rose-800 mb-1">Danger Zone</h3>
+      <p class="text-sm text-rose-600 mb-3">Deleting your account permanently removes your profile, active requests, and connection history.</p>
+      <button onclick="if(confirm('Are you sure you want to delete your student account?')){CC.deleteAccount()}" class="${btn} !bg-rose-600 hover:!bg-rose-700">Delete Account</button>
+    </div>`;
+  },
+  directory() {
+    return `<div class="flex flex-wrap gap-2 mb-4">
+      <select id="st" class="${inp}"><option value="id">ID</option><option value="branch">Branch</option><option value="skill">Skill</option></select>
+      <input id="sk" class="${inp} flex-1" placeholder="Search criteria…">
+      <button onclick="doSearch()" class="${btn}">Search</button>
+      <button onclick="$('res').innerHTML=grid(CC.sorted())" class="${btn} !bg-slate-700">Sort A–Z</button>
+    </div>
+    <div id="res">${grid(CC.all())}</div>`;
+  },
+  requests() {
+    const p = CC.pending();
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 mb-4">
+      <h3 class="font-semibold mb-2">Send Connection Request</h3>
+      <div class="flex gap-2">
+        <input id="rid" type="number" class="${inp} flex-1" placeholder="Recipient Student ID">
+        <button onclick="run(()=>{CC.send(+$('rid').value);toast('Request sent');show('requests')})" class="${btn}">Send Request</button>
+      </div>
+    </div>
+    <h3 class="font-semibold mb-2 text-slate-700">Pending Incoming Requests (FIFO Queue)</h3>
+    ${p.length ? p.map((r,i) => `
+      <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-200 mb-2 flex justify-between items-center">
+        <span>${i===0?'<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold mr-2">Next in Queue</span>':''}From <b>${(CC.find(r.from)||{}).name || 'Student'}</b> (ID ${r.from})</span>
+        ${i===0 ? `<span class="flex gap-2"><button onclick="proc(true)" class="${btn} !bg-emerald-600 hover:!bg-emerald-700 !py-1 text-sm">Accept</button><button onclick="proc(false)" class="${btn} !bg-rose-600 hover:!bg-rose-700 !py-1 text-sm">Reject</button></span>` : '<span class="text-xs text-slate-400">Waiting in queue</span>'}
+      </div>
+    `).join('') : '<p class="text-slate-500">No pending incoming requests.</p>'}`;
+  },
+  connections() {
+    const connList = CC.me().connections.map(CC.find).filter(Boolean);
+    return grid(connList, true);
+  }
+};
+
+function doSearch() {
+  $('res').innerHTML = grid(CC.search($('st').value, $('sk').value));
+}
+
+function proc(accept) {
+  run(() => { CC.process(accept); show('requests'); });
+}
+
+function show(t) {
+  $('title').textContent = tabs[t];
+  $('view').innerHTML = views[t]();
+  $('nav').innerHTML = Object.keys(tabs).map(k => `
+    <button onclick="show('${k}')" class="text-left whitespace-nowrap px-3 py-2 rounded transition ${k===t ? 'bg-indigo-900 font-bold' : 'hover:bg-indigo-600'}">${tabs[k]}</button>
+  `).join('');
+}
+
+function openChat(partnerId) {
+  activeChatPartnerId = partnerId;
+  const partner = CC.find(partnerId);
+  $('chatPartnerName').textContent = partner.name;
+  $('chatPartnerSub').textContent = `ID: ${partner.id} · ${partner.branch}`;
+  $('chatModal').classList.remove('hidden');
+  renderMessages();
+}
+
+function closeChat() {
+  $('chatModal').classList.add('hidden');
+  activeChatPartnerId = null;
+}
+
+function renderMessages() {
+  if (!activeChatPartnerId) return;
+  const msgs = CC.getChatHistory(activeChatPartnerId);
+  const me = CC.me();
+  
+  $('chatMessages').innerHTML = msgs.length ? msgs.map(m => `
+    <div class="flex flex-col ${m.senderId === me.id ? 'items-end' : 'items-start'}">
+      <div class="max-w-[80%] rounded-xl px-3.5 py-2 text-sm ${m.senderId === me.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-sm'}">
+        ${m.text}
+      </div>
+      <span class="text-[10px] text-slate-400 mt-0.5 px-1">${m.timestamp}</span>
+    </div>
+  `).join('') : '<p class="text-center text-slate-400 text-sm mt-4">No message history yet. Say hi!</p>';
+  
+  $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+}
+
+function sendMsg() {
+  const input = $('chatInput');
+  if (!input.value.trim()) return;
+  run(() => {
+    CC.sendMessage(activeChatPartnerId, input.value);
+    input.value = '';
+    renderMessages();
+  });
+}
+
+show('profile');
+</script>
+</body>
+</html>

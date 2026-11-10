@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CampusConnect – Login</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="card">
+  <div class="logo">🎓 CampusConnect</div>
+  <p class="sub">Find and connect with students on campus.</p>
+  <div class="tabs"><button id="tLogin" class="active">Login</button><button id="tReg">Create account</button></div>
+  <label>Student ID</label><input id="id" type="number" min="1" placeholder="e.g. 101">
+  <div id="regFields" class="hidden">
+    <label>Name</label><input id="name">
+    <label>Branch</label><input id="branch" placeholder="CSE">
+    <label>Year (1-8)</label><input id="year" type="number" min="1" max="8">
+  </div>
+  <label>Password </label><input id="pw" type="password">
+  <button class="btn" id="go">Login</button>
+  <div class="msg" id="msg"></div>
+</div>
+<script src="app.js"></script>
+<script>
+let reg=false;const $=i=>document.getElementById(i);
+function mode(r){reg=r;$('regFields').classList.toggle('hidden',!r);$('tLogin').classList.toggle('active',!r);$('tReg').classList.toggle('active',r);$('go').textContent=r?'Create account':'Login';$('msg').textContent=''}
+$('tLogin').onclick=()=>mode(false);$('tReg').onclick=()=>mode(true);
+$('go').onclick=()=>{
+  try{
+    const id=+$('id').value,pw=$('pw').value;
+    if(reg){CC.register(id,$('name').value.trim(),$('branch').value.trim(),+$('year').value,pw);mode(false);$('msg').style.color='#16a34a';$('msg').textContent='Account created. Please log in.';return}
+    CC.login(id,pw);location.href='app.html';
+  }catch(e){$('msg').style.color='#dc2626';$('msg').textContent=e.message}
+};
+</script></body></html>
